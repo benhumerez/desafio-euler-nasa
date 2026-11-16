@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador NASA 1962 | Métodos Numéricos</title>
+<style>
+:root{--bg:#0b1220;--panel:#131f32;--panel2:#1b2b43;--ink:#edf4ff;--muted:#a9bad0;--cyan:#53d7e8;--gold:#ffc66d;--green:#72dfad;--red:#ff8f8f}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#08101d,#12233b);color:var(--ink);font:16px/1.5 system-ui,Segoe UI,Arial,sans-serif}
+header{padding:38px 20px 28px;text-align:center;background:radial-gradient(ellipse at top,#24466a,transparent 70%)}
+header .tag{color:var(--cyan);font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:.78rem}
+h1{font-size:clamp(1.8rem,4vw,3rem);line-height:1.1;margin:12px 0}
+header p{max-width:820px;margin:12px auto;color:var(--muted)}
+main{max-width:1150px;margin:auto;padding:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid #2b405c;border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:0 12px 35px #0002}
+h2{font-size:1.25rem;margin:0 0 12px;color:var(--cyan)}h3{font-size:1rem;margin:0 0 8px}
+.muted,small{color:var(--muted)}label{display:block;color:var(--muted);font-size:.9rem;margin-bottom:5px}
+input,select{width:100%;background:#091526;color:var(--ink);border:1px solid #38516f;border-radius:9px;padding:10px;font:inherit}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px}
+button{background:var(--cyan);color:#071521;border:0;border-radius:10px;padding:11px 17px;font-weight:800;cursor:pointer;margin:8px 8px 0 0}
+button.secondary{background:#2b405c;color:var(--ink);border:1px solid #48617e}
+.kpi{font-size:1.55rem;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
+.kpi span{display:block;font-size:.78rem;color:var(--muted);font-weight:500}
+.formula{background:#091526;border-left:3px solid var(--cyan);padding:12px;border-radius:8px;overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem;white-space:nowrap}th,td{padding:8px 10px;border-bottom:1px solid #2b405c;text-align:right}th{color:var(--cyan);background:#1a2b42;position:sticky;top:0}td:first-child,th:first-child{text-align:center}
+.tablewrap{overflow:auto;max-height:430px;border:1px solid #2b405c;border-radius:10px}
+canvas{width:100%;height:300px;background:#091526;border-radius:10px}
+.note{border-left:3px solid var(--gold);padding:10px 13px;background:#211e1a;border-radius:7px;color:#ffe5bd}
+footer{text-align:center;color:var(--muted);padding:25px}
+@media(max-width:600px){main{padding:12px}.card{padding:14px}canvas{height:240px}}
+</style>
+</head>
+<body>
+<header>
+ <div class="tag">Métodos numéricos · Ingeniería de Sistemas</div>
+ <h1>Misión NASA 1962: simulador de lanzamiento</h1>
+ <p>Aplicación educativa inspirada en el trabajo matemático de la carrera espacial. Calcula velocidad y altura mediante Euler, Heun y Runge–Kutta de cuarto orden (RK4), y compara con la solución analítica.</p>
+</header>
+<main>
+<section class="card">
+ <h2>1. Parámetros del modelo</h2>
+ <div class="controls">
+  <div><label for="mass">Masa m (kg)</label><input id="mass" type="number" min="1" step="10" value="1000"></div>
+  <div><label for="thrust">Empuje T (N)</label><input id="thrust" type="number" min="0" step="100" value="15000"></div>
+  <div><label for="gravity">Gravedad g (m/s²)</label><input id="gravity" type="number" min="0" step=".01" value="9.81"></div>
+  <div><label for="drag">Coeficiente k (kg/s)</label><input id="drag" type="number" min="0" step="1" value="100"></div>
+  <div><label for="duration">Tiempo final (s)</label><input id="duration" type="number" min=".1" step="1" value="20"></div>
+  <div><label for="step">Paso h (s)</label><select id="step"><option>2</option><option>1</option><option>0.5</option><option>0.25</option><option>0.1</option></select></div>
+ </div>
+ <button id="run">Ejecutar simulación</button><button class="secondary" id="reset">Restablecer valores</button>
+ <p class="muted" id="status" aria-live="polite">Modelo: empuje, gravedad y resistencia lineal constantes.</p>
+</section>
+<section class="grid">
+ <div class="card"><h3>Euler · velocidad final</h3><div class="kpi" id="eV">—<span>m/s</span></div></div>
+ <div class="card"><h3>Euler · altura final</h3><div class="kpi" id="eY">—<span>m</span></div></div>
+ <div class="card"><h3>Solución analítica · velocidad</h3><div class="kpi" id="aV">—<span>m/s</span></div></div>
+ <div class="card"><h3>Solución analítica · altura</h3><div class="kpi" id="aY">—<span>m</span></div></div>
+</section>
+<section class="card">
+ <h2>2. Modelo matemático</h2>
+ <div class="formula">
+  m·dv/dt = T − mg − kv<br>
+  dv/dt = a − b·v, donde a = T/m − g y b = k/m<br>
+  dy/dt = v; condiciones iniciales: v(0)=0, y(0)=0
+ </div>
+ <p>Solución analítica (para b distinto de cero):</p>
+ <div class="formula">v(t) = (a/b)(1 − e<sup>−bt</sup>)<br>
+ y(t) = (a/b)t − (a/b²)(1 − e<sup>−bt</sup>)</div>
+ <p class="muted">Si k=0, se usa el caso límite: v(t)=a·t e y(t)=½a·t².</p>
+</section>
+<section class="card">
+ <h2>3. Comparación de métodos</h2>
+ <div class="grid">
+  <div><h3>Velocidad vs. tiempo</h3><canvas id="velocityChart" width="900" height="330"></canvas></div>
+  <div><h3>Altura vs. tiempo</h3><canvas id="heightChart" width="900" height="330"></canvas></div>
+ </div>
+ <p class="muted">Las líneas representan Euler, Heun, RK4 y la solución analítica. El gráfico se escala automáticamente.</p>
+</section>
+<section class="card">
+ <h2>4. Tabla de resultados</h2>
+ <p class="muted">Se muestran los valores en cada paso de integración. Los errores son absolutos respecto a la solución analítica.</p>
+ <div class="tablewrap"><table><thead><tr><th>t (s)</th><th>Euler v</th><th>Euler y</th><th>Heun v</th><th>Heun y</th><th>RK4 v</th><th>RK4 y</th><th>Exacta v</th><th>Exacta y</th></tr></thead><tbody id="results"></tbody></table></div>
+</section>
+<section class="card">
+ <h2>5. Análisis del error al tiempo final</h2>
+ <div class="grid">
+  <div><h3>Error de velocidad (m/s)</h3><div class="kpi" id="errV">—</div></div>
+  <div><h3>Error de altura (m)</h3><div class="kpi" id="errY">—</div></div>
+  <div><h3>Iteraciones</h3><div class="kpi" id="iterations">—</div></div>
+ </div>
+ <div class="note">Interpretación: Euler explícito suele sobreestimar la velocidad y subestimar la altura en este ejemplo. Reducir h normalmente disminuye el error. RK4 suele ofrecer mayor precisión para el mismo paso, aunque requiere más evaluaciones de la función.</div>
+</section>
+<section class="card">
+ <h2>6. Interpretación y limitaciones</h2>
+ <p>Este modelo es una simplificación académica: supone movimiento vertical, masa y empuje constantes, gravedad constante y resistencia proporcional a la velocidad. Un cohete real consume combustible, cambia de masa, puede modificar su empuje y está sujeto a una resistencia aerodinámica dependiente de la densidad atmosférica y de la velocidad relativa del aire.</p>
+ <p>La película <i>Talentos ocultos (Hidden Figures)</i> recuerda el papel de las matemáticas en la carrera espacial. Esta aplicación no reproduce los cálculos oficiales de la NASA ni afirma que este modelo fuera el utilizado en la misión Friendship 7: es una actividad didáctica inspirada en ese contexto histórico.</p>
+</section>
+</main>
+<footer>Proyecto académico · Métodos Numéricos · Simulación educativa, no apta para diseño real de vehículos espaciales.</footer>
+<script>
+const $=id=>document.getElementById(id);
+const fmt=(x,d=4)=>Number(x).toFixed(d);
+function params(){
+ const m=+$('mass').value,T=+$('thrust').value,g=+$('gravity').value,k=+$('drag').value,H=+$('duration').value,h=+$('step').value;
+ if(!(m>0&&T>=0&&g>=0&&k>=0&&H>0&&h>0))throw Error("Verifica los datos: masa y tiempo deben ser positivos; los demás valores no pueden ser negativos.");
+ return {m,T,g,k,H,h,a:T/m-g,b:k/m};
+}
+function exact(t,p){
+ if(Math.abs(p.b)<1e-12)return {v:p.a*t,y:.5*p.a*t*t};
+ const e=Math.exp(-p.b*t);
+ return {v:p.a/p.b*(1-e),y:p.a/p.b*t-p.a/(p.b*p.b)*(1-e)};
+}
+function deriv(s,p){return {v:p.a-p.b*s.v,y:s.v};}
+function add(s,k,c){return {v:s.v+c*k.v,y:s.y+c*k.y};}
+function heun(s,dt,p){const k1=deriv(s,p),pred=add(s,k1,dt),k2=deriv(pred,p);return add(s,{v:(k1.v+k2.v)/2,y:(k1.y+k2.y)/2},dt);}
+function rk4(s,dt,p){
+ const k1=deriv(s,p),k2=deriv(add(s,k1,dt/2),p),k3=deriv(add(s,k2,dt/2),p),k4=deriv(add(s,k3,dt),p);
+ return {v:s.v+dt*(k1.v+2*k2.v+2*k3.v+k4.v)/6,y:s.y+dt*(k1.y+2*k2.y+2*k3.y+k4.y)/6};
+}
+let data=[];
+function simulate(){
+ try{
+  const p=params(),n=Math.ceil(p.H/p.h);if(n>10000)throw Error("Demasiadas iteraciones. Aumenta el paso o reduce el tiempo.");
+  let E={v:0,y:0},Hn={v:0,y:0},R={v:0,y:0},t=0;data=[{t,E:{...E},H:{...Hn},R:{...R},X:exact(0,p)}];
+  for(let i=0;i<n;i++){
+   const dt=Math.min(p.h,p.H-t);
+   E={v:E.v+dt*(p.a-p.b*E.v),y:E.y+dt*E.v};
+   Hn=heun(Hn,dt,p);R=rk4(R,dt,p);t+=dt;
+   data.push({t,E:{...E},H:{...Hn},R:{...R},X:exact(t,p)});
+  }
+  const last=data[data.length-1],X=last.X;
+  $('eV').innerHTML=fmt(last.E.v)+'<span>m/s</span>';$('eY').innerHTML=fmt(last.E.y)+'<span>m</span>';
+  $('aV').innerHTML=fmt(X.v)+'<span>m/s</span>';$('aY').innerHTML=fmt(X.y)+'<span>m</span>';
+  $('errV').textContent=fmt(Math.abs(last.E.v-X.v));$('errY').textContent=fmt(Math.abs(last.E.y-X.y));$('iterations').textContent=n;
+  $('results').innerHTML=data.map(r=>`<tr><td>${fmt(r.t,3)}</td><td>${fmt(r.E.v)}</td><td>${fmt(r.E.y)}</td><td>${fmt(r.H.v)}</td><td>${fmt(r.H.y)}</td><td>${fmt(r.R.v)}</td><td>${fmt(r.R.y)}</td><td>${fmt(r.X.v)}</td><td>${fmt(r.X.y)}</td></tr>`).join('');
+  draw('velocityChart','v','Velocidad (m/s)');draw('heightChart','y','Altura (m)');
+  $('status').textContent=`Simulación completada: ${n} pasos, desde 0 hasta ${fmt(p.H,2)} segundos.`;
+ }catch(e){$('status').textContent=e.message;}
+}
+function draw(id,key,label){
+ const c=$(id),ctx=c.getContext('2d'),w=c.width,h=c.height,pad=58;
+ ctx.clearRect(0,0,w,h);const series=[['Euler','E','#53d7e8'],['Heun','H','#ffc66d'],['RK4','R','#72dfad'],['Analítica','X','#ff8f8f']];
+ const vals=data.flatMap(d=>series.map(s=>d[s[1]][key]));let min=Math.min(0,...vals),max=Math.max(0,...vals);if(max===min)max=min+1;
+ const x=t=>pad+t/(data[data.length-1].t||1)*(w-pad-20),y=v=>h-pad-(v-min)/(max-min)*(h-pad-25);
+ ctx.strokeStyle='#536982';ctx.lineWidth=1;ctx.fillStyle='#a9bad0';ctx.font='13px system-ui';
+ for(let i=0;i<=5;i++){let yy=pad+i*(h-pad*1.5)/5;ctx.beginPath();ctx.moveTo(pad,yy);ctx.lineTo(w-15,yy);ctx.stroke();let val=max-i*(max-min)/5;ctx.fillText(val.toFixed(1),5,yy+4);}
+ ctx.fillText('Tiempo (s)',w/2,h-8);ctx.save();ctx.translate(15,h/2);ctx.rotate(-Math.PI/2);ctx.fillText(label,0,0);ctx.restore();
+ series.forEach(s=>{ctx.strokeStyle=s[2];ctx.lineWidth=2.5;ctx.beginPath();data.forEach((d,i)=>{const xx=x(d.t),yy=y(d[s[1]][key]);i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});ctx.stroke();});
+ let lx=pad;series.forEach(s=>{ctx.fillStyle=s[2];ctx.fillRect(lx,12,13,4);ctx.fillStyle='#edf4ff';ctx.fillText(s[0],lx+18,19);lx+=105;});
+}
+$('run').addEventListener('click',simulate);
+$('reset').addEventListener('click',()=>{$('mass').value=1000;$('thrust').value=15000;$('gravity').value=9.81;$('drag').value=100;$('duration').value=20;$('step').value='2';simulate();});
+simulate();
+</script>
+</body></html>
